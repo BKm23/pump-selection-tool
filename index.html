@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pump Selection Tool — Preliminary Screening</title>
+<!--
+  Pump Selection Tool  (single-page, offline, no build step, no CDN)
+  Data: /data/<vendor>.js   Logic: engine.js   Registry: config.js
+  Works under file:// because vendor data is delivered as <script> wrappers
+  (fetch of local JSON is blocked by browsers under file://).
+-->
+<style>
+:root{
+  /* Okabe-Ito colour-blind-safe palette */
+  --ok-blue:#0072B2; --ok-orange:#E69F00; --ok-green:#009E73; --ok-verm:#D55E00;
+  --ok-purple:#CC79A7; --ok-sky:#56B4E9; --ok-yellow:#F0E442;
+  --ink:#1c2733; --muted:#5b6b7b; --line:#d7dee6; --bg:#f4f6f9; --panel:#ffffff;
+  --good:#009E73; --warn:#E69F00; --bad:#D55E00;
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 "Segoe UI",system-ui,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+h1,h2,h3,h4{margin:0 0 .4em}
+.topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:var(--ink);color:#fff;padding:10px 16px}
+.topbar h1{font-size:16px;margin:0;white-space:nowrap;align-self:center}
+.topbar .grow{flex:1}
+.topbar input{padding:5px 7px;border:1px solid #33465a;border-radius:4px;background:#0f1a26;color:#fff}
+.topbar label{font-size:11px;color:#9fb2c4;display:block;margin-bottom:2px}
+.btn{cursor:pointer;border:1px solid var(--ok-blue);background:var(--ok-blue);color:#fff;padding:7px 12px;border-radius:5px;font-weight:600;font-size:13px}
+.btn.sec{background:#fff;color:var(--ok-blue)}
+.btn.ghost{background:transparent;color:#fff;border-color:#33465a}
+.vend{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.vend label{color:#dfe8f0;font-size:13px;display:flex;align-items:center;gap:4px;margin:0}
+.wrap{display:grid;grid-template-columns:320px 1fr 300px;gap:12px;padding:12px;align-items:start}
+@media(max-width:1100px){.wrap{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.panel h2{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:6px}
+.fld{margin-bottom:9px}
+.fld label{display:block;font-weight:600;font-size:12px;margin-bottom:3px}
+.fld .tip{font-weight:400;color:var(--muted);font-size:11px}
+.row{display:flex;gap:6px}
+.row>*{flex:1;min-width:0}
+input,select{width:100%;padding:6px 7px;border:1px solid var(--line);border-radius:5px;font-size:13px;background:#fff}
+.unit{max-width:78px;flex:0 0 78px}
+details.adv{margin-top:8px;border-top:1px dashed var(--line);padding-top:8px}
+details.adv summary{cursor:pointer;font-weight:700;color:var(--ok-blue);font-size:12px}
+.calc{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dotted var(--line);font-size:13px}
+.calc b{font-variant-numeric:tabular-nums}
+.result{border:1px solid var(--line);border-left:5px solid var(--ok-blue);border-radius:7px;padding:11px;margin-bottom:11px}
+.result.r0{border-left-color:var(--ok-green)}
+.result h3{font-size:15px;display:flex;justify-content:space-between;align-items:center}
+.score{font-size:13px;font-weight:800;color:#fff;background:var(--ok-green);border-radius:20px;padding:2px 11px}
+.score.mid{background:var(--ok-orange)} .score.low{background:var(--ok-verm)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:3px 14px;margin:7px 0;font-size:12.5px}
+.grid2 span{color:var(--muted)} .grid2 b{font-variant-numeric:tabular-nums}
+.flags{margin:6px 0 0}
+.flag{display:inline-block;font-size:11px;background:#fff4e5;color:#8a5a00;border:1px solid #f0d9b0;border-radius:4px;padding:2px 7px;margin:2px 3px 0 0}
+.flag.bad{background:#fdeae2;color:#8a2b00;border-color:#f0b79a}
+.flag.dq{background:#eef2f7;color:#42566a;border-color:#cdd8e3}
+.bardetail{margin-top:6px;font-size:11.5px;color:var(--muted)}
+.bar{height:7px;background:#eef2f7;border-radius:4px;overflow:hidden;margin:2px 0}
+.bar>i{display:block;height:100%;background:var(--ok-blue)}
+.muted{color:var(--muted)} .small{font-size:11px}
+.badge{display:inline-block;font-size:10px;font-weight:700;border-radius:3px;padding:1px 5px;vertical-align:middle}
+.badge.visc{background:var(--ok-purple);color:#fff}
+.curvewrap{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;display:none}
+.legend{display:flex;gap:12px;font-size:11px;flex-wrap:wrap;margin-top:4px}
+.legend i{display:inline-block;width:12px;height:3px;vertical-align:middle;margin-right:4px}
+footer{padding:16px;color:var(--muted);font-size:11.5px;border-top:1px solid var(--line);margin-top:8px}
+.notice{background:#fff8e1;border:1px solid #f0e0a0;border-radius:6px;padding:8px 10px;font-size:12px;margin-bottom:10px}
+table.ds{width:100%;border-collapse:collapse;font-size:12px}
+table.ds td,table.ds th{border:1px solid var(--line);padding:4px 7px;text-align:left}
+#printArea{display:none}
+@media print{
+  body *{visibility:hidden}
+  #printArea,#printArea *{visibility:visible}
+  #printArea{display:block;position:absolute;left:0;top:0;width:100%}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>⚙ Pump Selection Tool</h1>
+  <div><label>Project</label><input id="projName" placeholder="Project / job no."></div>
+  <div><label>Engineer</label><input id="engName" placeholder="Your name"></div>
+  <div><label>Date</label><input id="projDate" type="date"></div>
+  <div class="grow"></div>
+  <div class="vend" id="vendorBox"><span class="small" style="color:#9fb2c4">Vendors:</span></div>
+  <button class="btn sec" id="loadJsonBtn" title="Add a vendor JSON at runtime">+ Load vendor JSON…</button>
+  <input type="file" id="jsonFile" accept=".json" style="display:none" multiple>
+  <button class="btn ghost" id="exportDS">Export Datasheet</button>
+  <button class="btn ghost" id="exportRFQ">Export RFQ Email</button>
+</div>
+
+<div class="wrap">
+  <!-- ============ LEFT : INPUTS ============ -->
+  <section class="panel" id="inputs">
+    <h2>Duty Inputs</h2>
+    <div class="fld"><label>Service description</label>
+      <input id="service" placeholder="e.g. Boiler feedwater"></div>
+    <div class="fld"><label>Fluid</label>
+      <select id="fluid">
+        <option>water</option><option>condensate</option><option>white liquor</option>
+        <option>black liquor</option><option>green liquor</option><option>paper stock</option>
+        <option>hot oil</option><option>brine</option><option>slurry</option><option>other</option>
+      </select></div>
+
+    <div class="fld"><label>Flow rate <span class="tip">duty capacity</span></label>
+      <div class="row"><input id="flow" type="number" value="150" step="any">
+        <select id="flowU" class="unit"><option>GPM</option><option>m³/h</option></select></div></div>
+
+    <div class="fld"><label>Total Dynamic Head <span class="tip">system TDH</span></label>
+      <div class="row"><input id="tdh" type="number" value="300" step="any">
+        <select id="tdhU" class="unit"><option>ft</option><option>m</option><option>psi</option></select></div></div>
+
+    <div class="fld"><label>NPSH available <span class="tip">at pump suction</span></label>
+      <div class="row"><input id="npsha" type="number" value="20" step="any">
+        <select id="npshaU" class="unit"><option>ft</option><option>m</option></select></div></div>
+
+    <div class="row">
+      <div class="fld"><label>Suction press. <span class="tip">psig</span></label><input id="pSuc" type="number" value="5" step="any"></div>
+      <div class="fld"><label>Disch. press. <span class="tip">psig</span></label><input id="pDis" type="number" value="135" step="any"></div>
+    </div>
+
+    <div class="fld"><label>Operating temperature</label>
+      <div class="row"><input id="temp" type="number" value="120" step="any">
+        <select id="tempU" class="unit"><option>°F</option><option>°C</option></select></div></div>
+
+    <div class="row">
+      <div class="fld"><label>Specific gravity</label><input id="sg" type="number" value="1.0" step="any"></div>
+      <div class="fld"><label>Viscosity <span class="tip">cP</span></label><input id="visc" type="number" value="1.0" step="any"></div>
+    </div>
+
+    <div class="row">
+      <div class="fld"><label>Solids / consistency <span class="tip">% (stock=consistency)</span></label><input id="solidsPct" type="number" value="0" step="any" title="For paper stock and liquors this is the stock CONSISTENCY %. Standard stock pumps handle up to ~6-7%; 8-16% requires an MC pump (3500XD)."></div>
+      <div class="fld"><label>Max particle</label>
+        <div class="row"><input id="solidsSz" type="number" value="0" step="any">
+          <select id="solidsSzU" class="unit"><option>in</option><option>mm</option></select></div></div>
+    </div>
+
+    <div class="fld"><label>Frequency</label>
+      <select id="freq"><option value="60">60 Hz</option><option value="50">50 Hz</option></select></div>
+
+    <details class="adv"><summary>Optional / advanced</summary>
+      <div class="fld"><label>Material preference</label>
+        <select id="matPref">
+          <option value="any">Any / auto by fluid</option>
+          <option>CI</option><option>DI</option><option>316SS</option><option>CD4MCu</option>
+          <option>Duplex</option><option>Alloy20</option><option>Hastelloy</option>
+          <option>Titanium</option><option>FRP</option><option>PFA-lined</option><option>Hard Iron</option>
+        </select></div>
+      <div class="fld"><label>Sealing preference</label>
+        <select id="sealPref"><option value="any">Any</option><option value="packed">Packed</option>
+          <option value="single">Single mechanical</option><option value="double">Double</option>
+          <option value="sealless">Sealless / mag-drive</option></select></div>
+      <div class="fld"><label>Mounting</label>
+        <select id="mount"><option value="any">Any</option><option value="horizontal">Horizontal</option>
+          <option value="vertical">Vertical / sump</option><option value="in-line">In-line</option>
+          <option value="self-priming">Self-priming</option><option value="submersible">Submersible</option></select></div>
+      <div class="fld"><label><input type="checkbox" id="hazard" style="width:auto"> Hazardous service (bias to sealless)</label></div>
+      <div class="fld"><label>Code requirement</label>
+        <select id="code"><option value="any">Any</option><option>ANSI B73.1</option><option>ISO 5199</option><option>API 610</option></select></div>
+      <div class="fld"><label>Max speed (rpm) <span class="tip">blank = no limit</span></label><input id="maxRpm" type="number" placeholder="e.g. 1800" step="any"></div>
+    </details>
+
+    <button class="btn" id="runBtn" style="width:100%;margin-top:10px">Select Pumps ▶</button>
+  </section>
+
+  <!-- ============ CENTER : RESULTS ============ -->
+  <section class="panel" id="resultsPanel">
+    <h2>Recommended Pumps <span class="muted small" id="resCount"></span></h2>
+    <div class="notice" id="dataNotice"></div>
+    <div id="results"><p class="muted">Enter duty conditions and click <b>Select Pumps</b>.</p></div>
+  </section>
+
+  <!-- ============ RIGHT : PRE-SCREEN ============ -->
+  <aside class="panel" id="prescreen">
+    <h2>Hydraulic Pre-Screen</h2>
+    <div class="calc"><span>Specific speed N<sub>s</sub></span><b id="ns">—</b></div>
+    <div class="calc"><span>Suction sp. speed N<sub>ss</sub></span><b id="nss">—</b></div>
+    <div class="calc"><span>Recommended type</span><b id="ptype">—</b></div>
+    <div class="calc"><span>Hydraulic power (WHP)</span><b id="whp">—</b></div>
+    <div class="calc"><span>Shaft power (BHP)*</span><b id="bhp">—</b></div>
+    <div class="calc"><span>Reynolds number</span><b id="re">—</b></div>
+    <div class="calc"><span>Visc. corr. (Cq/Ch/Ce)</span><b id="vcorr">—</b></div>
+    <p class="small muted" style="margin-top:8px">*BHP assumes an assumed 70% efficiency until a pump is selected. N<sub>s</sub> uses head per stage for single-stage estimate. Recompute updates live as you edit inputs.</p>
+  </aside>
+</div>
+
+<footer>
+  <b>Data sources &amp; disclaimers.</b> Metadata transcribed from the ITT Goulds Pumps GPM9 Manual (60&nbsp;Hz) coverage tables. Performance curves shown are <b>modelled</b> from published hydraulic envelopes (H&nbsp;=&nbsp;a&nbsp;−&nbsp;b·Q²), not pixel-digitized from the manual, and are flagged by data-quality level. This tool is for <b>preliminary selection and screening only</b>. Final pump selection, guaranteed performance, NPSHr, and materials <b>must be confirmed by the OEM</b> (Goulds PSS / Andritz / Sulzer) selection software and datasheets before purchase. Andritz and Sulzer datasets are placeholders until loaded.
+</footer>
+
+<div id="printArea"></div>
+
+<!-- registry + engine (order matters). Vendor data is loaded DYNAMICALLY from
+     config.js below, so adding a vendor = edit config.js only (no HTML edit). -->
+<script src="config.js"></script>
+<script src="engine.js"></script>
+<script>
+/* Vendor loader: inject data/<key>.js for every vendor in config.js, then boot.
+   Works under file:// (script injection is not subject to fetch/CORS rules).
+   A missing data file simply onerror's and is skipped, so a config entry
+   without a file won't break the tool. */
+(function(){
+  var CFG = window.PUMP_TOOL_CONFIG;
+  window.VENDOR_DATA = window.VENDOR_DATA || {};
+  var vendors = (CFG && CFG.vendors) || [];
+  var pending = vendors.length;
+  if (!pending) return boot();
+  vendors.forEach(function(v){
+    var s = document.createElement("script");
+    s.src = "data/" + v.key + ".js";
+    s.onload = s.onerror = function(){ if(--pending === 0) boot(); };
+    document.head.appendChild(s);
+  });
+})();
+
+function boot(){
+"use strict";
+const E = window.PumpEngine, CFG = window.PUMP_TOOL_CONFIG;
+const $ = id => document.getElementById(id);
+window.VENDOR_DATA = window.VENDOR_DATA || {};
+let lastResults = [], lastInputs = null;
+
+// ---- default date ----
+$("projDate").value = new Date().toISOString().slice(0,10);
+
+// ---- vendor checkboxes ----
+const enabled = {};
+CFG.vendors.forEach(v=>{
+  enabled[v.key] = v.enabledByDefault;
+  const has = window.VENDOR_DATA[v.key] && (window.VENDOR_DATA[v.key].pumps||[]).length;
+  const lbl = document.createElement("label");
+  lbl.innerHTML = `<input type="checkbox" ${v.enabledByDefault?"checked":""} data-v="${v.key}"> ${v.label}`
+    + `<span class="small muted">(${has? has+" pumps":"empty"})</span>`;
+  lbl.querySelector("input").addEventListener("change",e=>{enabled[v.key]=e.target.checked;});
+  $("vendorBox").appendChild(lbl);
+});
+
+// ---- runtime JSON loader (add a vendor without a server) ----
+$("loadJsonBtn").onclick=()=>$("jsonFile").click();
+$("jsonFile").onchange=ev=>{
+  [...ev.target.files].forEach(f=>{
+    const r=new FileReader();
+    r.onload=()=>{ try{
+      const d=JSON.parse(r.result);
+      const key=(d.vendor||f.name.replace(/\.json$/i,"")).toLowerCase();
+      window.VENDOR_DATA[key]=d; enabled[key]=true;
+      alert(`Loaded ${d.pumps?d.pumps.length:0} pumps for "${key}". Re-run selection.`);
+    }catch(e){alert("Bad JSON: "+e.message);} };
+    r.readAsText(f);
+  });
+};
+
+// ---- unit helpers to duty (US) ----
+function toGpm(v,u){return u==="m³/h"?E.U.m3h_to_gpm(v):v;}
+function toFt(v,u,sg){return u==="m"?E.U.m_to_ft(v):u==="psi"?E.U.psi_to_ft(v,sg):v;}
+function toFtN(v,u){return u==="m"?E.U.m_to_ft(v):v;}
+function toF(v,u){return u==="°C"?E.U.C_to_F(v):v;}
+function toIn(v,u){return u==="mm"?v/25.4:v;}
+const num=id=>parseFloat($(id).value)||0;
+
+function readInputs(){
+  const sg=num("sg")||1;
+  return {
+    service:$("service").value, fluid:$("fluid").value,
+    flowGpm:toGpm(num("flow"),$("flowU").value),
+    tdhFt:toFt(num("tdh"),$("tdhU").value,sg),
+    npshaFt:toFtN(num("npsha"),$("npshaU").value),
+    suctionPsig:num("pSuc"), dischargePsig:num("pDis"),
+    tempF:toF(num("temp"),$("tempU").value),
+    specificGravity:sg, viscosityCp:num("visc")||1,
+    solidsPct:num("solidsPct"), maxSolidsIn:toIn(num("solidsSz"),$("solidsSzU").value),
+    frequencyHz:parseInt($("freq").value,10),
+    materialPref:$("matPref").value, sealingPref:$("sealPref").value,
+    mounting:$("mount").value, hazardous:$("hazard").checked,
+    code:$("code").value, maxSpeedRpm:num("maxRpm")||null,
+    npshMarginTargetFt:CFG.defaults.npshMarginTargetFt
+  };
+}
+
+// ---- right panel live pre-screen ----
+function updatePrescreen(){
+  const inp=readInputs();
+  const N=inp.maxSpeedRpm||(inp.frequencyHz===50?2900:3550);
+  const ns=E.specificSpeed(N,inp.flowGpm,inp.tdhFt);
+  const whp=E.waterHP(inp.flowGpm,inp.tdhFt,inp.specificGravity);
+  const bhp=whp/0.70;
+  // estimate NPSHr from Nss target ~9000 to show a nominal Nss line
+  const nss=inp.npshaFt>0?E.suctionSpecificSpeed(N,inp.flowGpm,Math.max(inp.npshaFt-inp.npshMarginTargetFt,1)):0;
+  const re=E.reynolds(inp.flowGpm,inp.viscosityCp,inp.specificGravity,4);
+  const vc=E.viscosityCorrection(inp.flowGpm,inp.tdhFt,N,inp.viscosityCp,inp.specificGravity);
+  $("ns").textContent=ns?Math.round(ns).toLocaleString():"—";
+  $("nss").textContent=nss?Math.round(nss).toLocaleString()+" (est)":"—";
+  $("ptype").textContent=E.pumpTypeByNs(ns);
+  $("whp").textContent=fmt(whp)+" HP";
+  $("bhp").textContent=fmt(bhp)+" HP";
+  $("re").textContent=isFinite(re)?sci(re):"—";
+  $("vcorr").textContent=vc.applied?`${vc.Cq.toFixed(2)}/${vc.Ch.toFixed(2)}/${vc.Ce.toFixed(2)}`:"none (≤10 cP)";
+}
+function fmt(x){return x>=100?Math.round(x):x>=10?x.toFixed(1):x.toFixed(2);}
+function sci(x){return x>=1e4||(x<1e-2&&x>0)?x.toExponential(2):Math.round(x).toLocaleString();}
+["flow","flowU","tdh","tdhU","npsha","npshaU","temp","tempU","sg","visc","freq","maxRpm"]
+  .forEach(id=>$(id).addEventListener("input",updatePrescreen));
+updatePrescreen();
+
+// ---- run selection ----
+$("runBtn").onclick=run;
+function run(){
+  const inp=readInputs(); lastInputs=inp;
+  const sets=CFG.vendors.filter(v=>enabled[v.key]).map(v=>window.VENDOR_DATA[v.key]).filter(Boolean);
+  const extra=Object.keys(window.VENDOR_DATA).filter(k=>!CFG.vendors.find(v=>v.key===k)&&enabled[k]).map(k=>window.VENDOR_DATA[k]);
+  const results=E.selectPumps(inp,sets.concat(extra),CFG,{topN:5});
+  lastResults=results;
+  renderNotice(results);
+  renderResults(results,inp);
+  updatePrescreen();
+}
+
+function renderNotice(res){
+  const n=$("dataNotice");
+  const lows=res.filter(r=>r.pump.data_quality!=="digitized_high").length;
+  n.innerHTML = res.length
+    ? `Showing top ${res.length}. ${lows} of these use modelled curves — verify duty against Goulds PSS before purchase.`
+    : `No pump passed the hard constraints. Loosen preferences, widen speed, or check flow/head/temperature limits.`;
+}
+
+function renderResults(res,inp){
+  $("resCount").textContent = res.length?`(top ${res.length})`:"";
+  const box=$("results");
+  if(!res.length){box.innerHTML='<p class="muted">No matches — adjust inputs.</p>';return;}
+  box.innerHTML="";
+  res.forEach((r,i)=>{
+    const p=r.pump, cls=r.score>=70?"":r.score>=50?"mid":"low";
+    const trim=r.reqImpeller?r.reqImpeller.dia.toFixed(2)+'"':"—";
+    const el=document.createElement("div");
+    el.className="result r"+(i===0?"0":"");
+    el.innerHTML=`
+      <h3><span>${i+1}. ${p.vendor} ${p.model}
+        ${inp.viscosityCp>10?'<span class="badge visc">VISC-CORR</span>':''}</span>
+        <span class="score ${cls}">${r.score}</span></h3>
+      <div class="small muted">${p.size} · ${p.construction_type} · ${(p.speeds_rpm||[]).join("/")} rpm</div>
+      <div class="grid2">
+        <span>Duty point</span><b>${Math.round(inp.flowGpm)} gpm @ ${Math.round(inp.tdhFt)} ft</b>
+        <span>% of BEP flow</span><b>${Math.round(r.pctBep)}%</b>
+        <span>Req. impeller</span><b>${trim} (max ${p.max_impeller_dia_in}")</b>
+        <span>Efficiency @ duty</span><b>${r.effDuty?r.effDuty.toFixed(0):"—"}%</b>
+        <span>NPSHr / margin</span><b>${r.npshr.toFixed(1)} ft / ${r.npshMargin.toFixed(1)} ft</b>
+        <span>Est. BHP → motor</span><b>${r.bhp.toFixed(1)} → ${r.motorHp} HP</b>
+        <span>Material</span><b>${r.material}</b>
+        <span>Max T / P</span><b>${p.max_temp_F}°F / ${p.max_pressure_psig} psig</b>
+        ${p.consistency_pct?`<span>Consistency</span><b>${p.consistency_pct}</b>`:''}
+      </div>
+      <div class="flags">
+        ${r.warnings.map(w=>`<span class="flag ${/NEGATIVE|risk/.test(w)?'bad':/confidence|Modelled/.test(w)?'dq':''}">${w}</span>`).join("")}
+      </div>
+      <details class="bardetail"><summary style="cursor:pointer">Score breakdown (weights: BEP ${CFG.weights.bepFlow}, NPSH ${CFG.weights.npshMargin}, Eff ${CFG.weights.efficiency}, Trim ${CFG.weights.trim}, Mat ${CFG.weights.material}, Svc ${CFG.weights.serviceMatch})</summary>
+        ${barLine("% BEP flow",r.breakdown.bepFlow,CFG.weights.bepFlow)}
+        ${barLine("NPSH margin",r.breakdown.npshMargin,CFG.weights.npshMargin)}
+        ${barLine("Efficiency",r.breakdown.efficiency,CFG.weights.efficiency)}
+        ${barLine("Impeller trim",r.breakdown.trim,CFG.weights.trim)}
+        ${barLine("Material match",r.breakdown.material,CFG.weights.material)}
+        ${barLine("Service match",r.breakdown.serviceMatch,CFG.weights.serviceMatch)}
+      </details>
+      <button class="btn sec" style="margin-top:8px" data-curve="${i}">Show Curve ▾</button>
+      <button class="btn sec" style="margin-top:8px" data-pick="${i}">Use for Datasheet</button>
+      <div class="curvewrap" id="cw${i}"></div>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll("[data-curve]").forEach(b=>b.onclick=()=>toggleCurve(+b.dataset.curve,inp));
+  box.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{selectedIdx=+b.dataset.pick;
+    b.textContent="✓ Selected for Datasheet";});
+}
+function barLine(name,val,max){
+  const pct=Math.round(val/max*100);
+  return `<div>${name} <span class="muted">${val.toFixed(1)}/${max}</span>
+    <div class="bar"><i style="width:${pct}%"></i></div></div>`;
+}
+
+let selectedIdx=0;
+// ---- SVG curve render ----
+function toggleCurve(i,inp){
+  const cw=$("cw"+i);
+  if(cw.style.display==="block"){cw.style.display="none";return;}
+  cw.style.display="block";
+  cw.innerHTML=renderCurveSVG(lastResults[i],inp);
+}
+function renderCurveSVG(r,inp){
+  const c=r.curve,p=r.pump;
+  const W=560,H=260,mL=48,mR=42,mT=14,mB=34;
+  const head=c.head_curve_points[String(p.max_impeller_dia_in)]||[];
+  const Qs=head.map(d=>d[0]), Hs=head.map(d=>d[1]);
+  const eff=c.efficiency_curve, npsh=c.npshr_curve;
+  const Qmax=Math.max(...Qs,inp.flowGpm)*1.05;
+  const Hmax=Math.max(...Hs,inp.tdhFt)*1.1;
+  const Emax=Math.max(...eff.map(d=>d[1]),100);
+  const Nmax=Math.max(...npsh.map(d=>d[1]),inp.npshaFt)*1.1;
+  const x=q=>mL+(q/Qmax)*(W-mL-mR);
+  const yH=h=>H-mB-(h/Hmax)*(H-mT-mB);
+  const yE=e=>H-mB-(e/Emax)*(H-mT-mB);
+  const yN=n=>H-mB-(n/Nmax)*(H-mT-mB);
+  const path=(pts,fy)=>pts.map((d,k)=>(k?"L":"M")+x(d[0]).toFixed(1)+" "+fy(d[1]).toFixed(1)).join(" ");
+  let g="";
+  for(let k=0;k<=5;k++){const gx=mL+k/5*(W-mL-mR);g+=`<line x1="${gx}" y1="${mT}" x2="${gx}" y2="${H-mB}" stroke="#eef2f7"/>`;}
+  for(let k=0;k<=5;k++){const gy=mT+k/5*(H-mT-mB);g+=`<line x1="${mL}" y1="${gy}" x2="${W-mR}" y2="${gy}" stroke="#eef2f7"/>`;}
+  const dx=x(inp.flowGpm),dy=yH(inp.tdhFt);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">
+    ${g}
+    <line x1="${mL}" y1="${mT}" x2="${mL}" y2="${H-mB}" stroke="#9aa7b4"/>
+    <line x1="${mL}" y1="${H-mB}" x2="${W-mR}" y2="${H-mB}" stroke="#9aa7b4"/>
+    <path d="${path(head,yH)}" fill="none" stroke="var(--ok-blue)" stroke-width="2.5"/>
+    <path d="${path(eff,yE)}" fill="none" stroke="var(--ok-green)" stroke-width="2" stroke-dasharray="5 3"/>
+    <path d="${path(npsh,yN)}" fill="none" stroke="var(--ok-verm)" stroke-width="2" stroke-dasharray="2 3"/>
+    <line x1="${dx}" y1="${mT}" x2="${dx}" y2="${H-mB}" stroke="#b0b8c0" stroke-dasharray="3 3"/>
+    <line x1="${mL}" y1="${dy}" x2="${dx}" y2="${dy}" stroke="#b0b8c0" stroke-dasharray="3 3"/>
+    <circle cx="${dx}" cy="${dy}" r="5.5" fill="var(--ok-verm)" stroke="#fff" stroke-width="1.5"/>
+    <text x="${dx+8}" y="${dy-6}" font-size="11" fill="var(--ink)">duty ${Math.round(inp.flowGpm)}gpm/${Math.round(inp.tdhFt)}ft</text>
+    <text x="${mL}" y="${H-6}" font-size="10" fill="#5b6b7b">0</text>
+    <text x="${W-mR}" y="${H-6}" font-size="10" fill="#5b6b7b" text-anchor="end">${Math.round(Qmax)} gpm</text>
+    <text x="6" y="${mT+10}" font-size="10" fill="#5b6b7b">${Math.round(Hmax)} ft</text>
+    <text x="${(W)/2}" y="${H-2}" font-size="10" fill="#5b6b7b" text-anchor="middle">Flow (GPM)</text>
+  </svg>
+  <div class="legend">
+    <span><i style="background:var(--ok-blue)"></i>Head (max trim ${p.max_impeller_dia_in}")</span>
+    <span><i style="background:var(--ok-green)"></i>Efficiency %</span>
+    <span><i style="background:var(--ok-verm)"></i>NPSHr</span>
+    <span>● duty point</span></div>
+  <div class="small muted">Data quality: <b>${p.data_quality}</b> · curve = modelled (H = a − b·Q²). Verify vs Goulds PSS.</div>`;
+}
+
+// ---- Export: printable datasheet ----
+$("exportDS").onclick=()=>{
+  if(!lastResults.length){alert("Run a selection first.");return;}
+  const r=lastResults[selectedIdx]||lastResults[0], p=r.pump, inp=lastInputs;
+  $("printArea").innerHTML=`
+    <div style="font-family:Arial;padding:20px;max-width:760px">
+      <h2 style="border-bottom:2px solid #0072B2;padding-bottom:6px">Pump Selection Datasheet — Preliminary</h2>
+      <table class="ds"><tr><th>Project</th><td>${esc($("projName").value)}</td>
+        <th>Date</th><td>${$("projDate").value}</td></tr>
+        <tr><th>Engineer</th><td>${esc($("engName").value)}</td>
+        <th>Service</th><td>${esc(inp.service)}</td></tr></table>
+      <h3 style="margin-top:14px">Duty Conditions</h3>
+      <table class="ds">
+        <tr><th>Fluid</th><td>${inp.fluid}</td><th>Flow</th><td>${Math.round(inp.flowGpm)} gpm</td></tr>
+        <tr><th>TDH</th><td>${Math.round(inp.tdhFt)} ft</td><th>NPSHa</th><td>${inp.npshaFt.toFixed(1)} ft</td></tr>
+        <tr><th>Temp</th><td>${inp.tempF}°F</td><th>SG / Visc</th><td>${inp.specificGravity} / ${inp.viscosityCp} cP</td></tr>
+        <tr><th>Suction/Disch</th><td>${inp.suctionPsig}/${inp.dischargePsig} psig</td><th>Frequency</th><td>${inp.frequencyHz} Hz</td></tr>
+      </table>
+      <h3 style="margin-top:14px">Selected Pump</h3>
+      <table class="ds">
+        <tr><th>Vendor / Model</th><td>${p.vendor} ${p.model}</td><th>Size</th><td>${p.size}</td></tr>
+        <tr><th>Construction</th><td colspan="3">${p.construction_type}</td></tr>
+        <tr><th>Req. impeller</th><td>${r.reqImpeller?r.reqImpeller.dia.toFixed(2):"—"}" (max ${p.max_impeller_dia_in}")</td>
+            <th>% BEP</th><td>${Math.round(r.pctBep)}%</td></tr>
+        <tr><th>Efficiency</th><td>${r.effDuty?r.effDuty.toFixed(0):"—"}%</td>
+            <th>NPSHr / margin</th><td>${r.npshr.toFixed(1)} / ${r.npshMargin.toFixed(1)} ft</td></tr>
+        <tr><th>Est. BHP</th><td>${r.bhp.toFixed(1)} HP</td><th>Motor</th><td>${r.motorHp} HP (NEMA)</td></tr>
+        <tr><th>Material</th><td>${r.material}</td><th>Seal options</th><td>${(p.seal_chamber_options||[]).join(", ")}</td></tr>
+        <tr><th>Suitability score</th><td>${r.score}/100</td><th>Data quality</th><td>${p.data_quality}</td></tr>
+      </table>
+      <div style="margin-top:10px">${renderCurveSVG(r,inp)}</div>
+      <p style="font-size:11px;color:#555;margin-top:10px">${r.warnings.length?"Flags: "+r.warnings.join("; ")+".":""}</p>
+      <p style="font-size:11px;color:#555">PRELIMINARY selection only — confirm with OEM selection software before purchase.</p>
+      <table class="ds" style="margin-top:18px"><tr><th style="width:50%">Prepared by</th><th>Approved by</th></tr>
+        <tr><td style="height:48px"></td><td></td></tr></table>
+    </div>`;
+  window.print();
+};
+
+// ---- Export: RFQ email ----
+$("exportRFQ").onclick=()=>{
+  if(!lastResults.length){alert("Run a selection first.");return;}
+  const r=lastResults[selectedIdx]||lastResults[0], p=r.pump, inp=lastInputs;
+  const body=
+`Request for Quotation - Pump
+
+Project: ${$("projName").value}
+Engineer: ${$("engName").value}
+Date: ${$("projDate").value}
+
+Service: ${inp.service}
+Preliminary model of interest: ${p.vendor} ${p.model} (${p.size})
+
+DUTY CONDITIONS
+  Fluid: ${inp.fluid}
+  Flow: ${Math.round(inp.flowGpm)} US gpm
+  Total Dynamic Head: ${Math.round(inp.tdhFt)} ft
+  NPSH available: ${inp.npshaFt.toFixed(1)} ft
+  Suction / Discharge pressure: ${inp.suctionPsig} / ${inp.dischargePsig} psig
+  Operating temperature: ${inp.tempF} F
+  Specific gravity: ${inp.specificGravity}
+  Viscosity: ${inp.viscosityCp} cP
+  Solids: ${inp.solidsPct}% , max particle ${inp.maxSolidsIn.toFixed(2)} in
+  Frequency: ${inp.frequencyHz} Hz
+  Preferred material: ${r.material}
+
+Please confirm selection, guaranteed performance curve, NPSHr, efficiency and
+budgetary price. This duty was screened with a preliminary in-house tool and
+requires OEM confirmation.
+
+Thank you.`;
+  const subj=`RFQ - ${p.vendor} ${p.model} - ${inp.service||"pump"} - ${Math.round(inp.flowGpm)}gpm @ ${Math.round(inp.tdhFt)}ft`;
+  window.location.href=`mailto:?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
+};
+
+function esc(s){return String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
+
+// run once on load with defaults so the team sees output immediately
+run();
+} // end boot()
+</script>
+</body>
+</html>
